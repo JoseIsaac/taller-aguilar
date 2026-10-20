@@ -35,4 +35,4 @@ El login y la contraseña `admin / admin123` son solo para la demostración. El 
 
 Angular puede publicarse en Cloudflare Pages, que ofrece alojamiento gratuito para archivos estáticos. Para el sistema completo sin pago mensual, una posibilidad es una máquina OCI Always Free autoadministrada con Java y MySQL; Oracle indica límites por región/capacidad y el usuario debe mantener sistema operativo, firewall, parches y respaldos. Railway facilita desplegar MySQL, pero el plan gratuito aporta solo USD 1 de crédito mensual y es adecuado para pruebas, no para operación permanente. Para uso real, presupuestar un servicio administrado con respaldos y monitoreo es más confiable.
 
-La conexión con GitHub se realiza creando un repositorio remoto y vinculándolo desde la plataforma elegida; no hay remoto Git configurado en este directorio.
+El repositorio remoto de este proyecto es [JoseIsaac/taller-aguilar](https://github.com/JoseIsaac/taller-aguilar).
