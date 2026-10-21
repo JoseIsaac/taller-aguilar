@@ -152,17 +152,30 @@ public class ApiController {
     if (updated == 0) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario inactivo no encontrado");
     return Map.of("status", "restored");
   }
-  @GetMapping("/maintenances") public List<Map<String,Object>> maintenances() { return db.queryForList("SELECT m.id,m.vehicle_id AS unitId,m.mechanic_id AS mechanicId,v.unit_number AS unit,m.observation AS note,m.status,m.start_date AS start,m.end_date AS end FROM maintenance m JOIN vehicle v ON v.id=m.vehicle_id WHERE m.active=TRUE ORDER BY m.start_date DESC,m.id DESC"); }
+  @GetMapping("/maintenances") public List<Map<String,Object>> maintenances() { return db.queryForList("SELECT m.id,m.vehicle_id AS unitId,m.mechanic_id AS mechanicId,COALESCE(me.name,'') AS mechanic,v.unit_number AS unit,m.observation AS note,m.requires_part AS requiresPart,m.part_description AS partDescription,m.status,m.start_date AS start,m.end_date AS due FROM maintenance m JOIN vehicle v ON v.id=m.vehicle_id LEFT JOIN mechanic me ON me.id=m.mechanic_id WHERE m.active=TRUE AND m.deleted_at IS NULL ORDER BY m.start_date DESC,m.id DESC"); }
   @PostMapping("/maintenances") @Transactional public Map<String,Object> createMaintenance(@RequestBody Map<String,Object> b) {
+    int unitId = requiredInteger(b, "unitId");
+    ensureActiveVehicle(unitId);
+    String note = requiredText(b, "note");
+    java.sql.Date start = requiredDate(b, "start");
+    boolean requiresPart = optionalBoolean(b, "requiresPart");
+    String partDescription = requiresPart ? requiredText(b, "partDescription") : null;
     Long mechanicId = optionalMechanicId(b);
     lockActiveMechanic(mechanicId);
-    db.update("INSERT INTO maintenance(vehicle_id,mechanic_id,observation,status,start_date) VALUES(?,?,?,'TRABAJANDO',?)", b.get("unitId"), mechanicId, b.get("note"), b.get("start"));
+    db.update("INSERT INTO maintenance(vehicle_id,mechanic_id,observation,requires_part,part_description,status,start_date) VALUES(?,?, ?,?,?, 'TRABAJANDO',?)", unitId, mechanicId, note, requiresPart, partDescription, start);
     return Map.of("id", db.queryForObject("SELECT LAST_INSERT_ID()", Long.class));
   }
   @PutMapping("/maintenances/{id}") @Transactional public Map<String,String> updateMaintenance(@PathVariable long id, @RequestBody Map<String,Object> b) {
+    int unitId = requiredInteger(b, "unitId");
+    ensureActiveVehicle(unitId);
+    String note = requiredText(b, "note");
+    java.sql.Date start = requiredDate(b, "start");
+    String status = validMaintenanceStatus(requiredText(b, "status"));
+    boolean requiresPart = optionalBoolean(b, "requiresPart");
+    String partDescription = requiresPart ? requiredText(b, "partDescription") : null;
     Long mechanicId = optionalMechanicId(b);
     lockActiveMechanic(mechanicId);
-    int n = db.update("UPDATE maintenance SET vehicle_id=?,mechanic_id=?,observation=?,status=?,start_date=?,end_date=? WHERE id=?", b.get("unitId"), mechanicId, b.get("note"), b.get("status"), b.get("start"), "TERMINADO".equals(b.get("status")) ? b.getOrDefault("end", java.time.LocalDate.now().toString()) : null, id);
+    int n = db.update("UPDATE maintenance SET vehicle_id=?,mechanic_id=?,observation=?,requires_part=?,part_description=?,status=?,start_date=?,end_date=? WHERE id=? AND active=TRUE AND deleted_at IS NULL", unitId, mechanicId, note, requiresPart, partDescription, status, start, "TERMINADO".equals(status) ? java.time.LocalDate.now() : null, id);
     if (n == 0) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Mantenimiento no encontrado");
     return Map.of("status", "updated");
   }
@@ -219,6 +232,35 @@ public class ApiController {
       return id;
     } catch (NumberFormatException ex) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El identificador del mecánico debe ser un entero positivo");
+    }
+  }
+
+  private boolean optionalBoolean(Map<String,Object> body, String key) {
+    Object value = body.get(key);
+    if (value == null) return false;
+    if (value instanceof Boolean booleanValue) return booleanValue;
+    if ("true".equalsIgnoreCase(value.toString())) return true;
+    if ("false".equalsIgnoreCase(value.toString())) return false;
+    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El campo " + key + " debe ser verdadero o falso");
+  }
+
+  private java.sql.Date requiredDate(Map<String,Object> body, String key) {
+    java.sql.Date value = optionalDate(body, key);
+    if (value == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El campo " + key + " es obligatorio");
+    return value;
+  }
+
+  private String validMaintenanceStatus(String status) {
+    if (!List.of("TRABAJANDO", "TERMINADO").contains(status)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El estado del mantenimiento no es válido");
+    }
+    return status;
+  }
+
+  private void ensureActiveVehicle(int id) {
+    Integer count = db.queryForObject("SELECT COUNT(*) FROM vehicle WHERE id=? AND active=TRUE AND deleted_at IS NULL", Integer.class, id);
+    if (count == null || count == 0) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La unidad no existe o está dada de baja");
     }
   }
 

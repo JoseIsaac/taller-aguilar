@@ -68,6 +68,8 @@ CREATE TABLE IF NOT EXISTS maintenance (
   vehicle_id BIGINT NOT NULL,
   mechanic_id BIGINT,
   observation TEXT NOT NULL,
+  requires_part BOOLEAN NOT NULL DEFAULT FALSE,
+  part_description VARCHAR(500),
   status ENUM('TRABAJANDO', 'TERMINADO') NOT NULL DEFAULT 'TRABAJANDO',
   start_date DATE NOT NULL,
   end_date DATE,
